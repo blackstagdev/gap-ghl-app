@@ -5,6 +5,11 @@ const GOAFFPRO_API = 'https://api.goaffpro.com/v1/admin';
 const SPREADSHEET_ID = '1ZOur_nWFwq3zh0ERci-4AARxbric6EU2-zYWxfogaHE';
 const ACCESS_TOKEN = '5d7c7806d9545a1d44d0dfd9da39e4b9fc513d43fe24a56cb9ced3280252ac22';
 
+// ✅ GHL API credentials
+const GHL_LOCATION_ID = 'YKo6A5vmDaEqPUyWAi1r';
+const GHL_API_KEY = 'pit-13bada01-23cd-484e-909c-e9f49fc24546';
+
+// ✅ Google Sheets credentials
 const GOOGLE_SERVICE_ACCOUNT_EMAIL = 'ghl-sheets-automation@sheets-automation-472404.iam.gserviceaccount.com';
 const GOOGLE_PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDVjZ01Aw8zLrSK\nc1XXogBcXqeKI5gBT6kG/zEl3q2jlJRM1R9ypP/cd9Hp6Fl4dFnCxZTRzuPenqgk\nmdD5KEyRBaYxyp3JrL8bCIRjI8jx6jed9XuuUvBgUeOulkU2NXibBdavdzzSfluO\na8nVojeugddhpTNRMDFPyWVvpdW5ReK/qa8+Q/21vejpeqeRnNhjsAIZUP71kxTw\nAolVPaumrvI1mjYhOG1B3i20SwWVdANarwiGKgqowGxNUPE5pDV83A1yvrei5hT2\n7YixpuE6Zck4TcdaDgxpr7zkXwvYLJDcS1Z7r2zAcWNhbxy+sitRPz5uJ4aVqf8l\nA1+XvTBzAgMBAAECggEAArxLKLwuzCmLf4CFt3roRUajH8Zf8phaInBPaVxGXiOP\nmMJcIkRR0LmqMzRaPQxEgBW2188uJRJkNf/QaPimrm7jl5ywU76GPiroQzrYnpyw\n9LGJ0YxXbuxtnbVoEo8xyc6T1vCQk2Ox+YuQ7M8kpnQcVbBfjWkwIIUEax81MyfX\nhyaoy+I+pGOdPUufdRc/MBEVcofbenDJddA7vmEXc4Zoq95jWP2w/6FvHiRILL39\nVBJ6cb+UsYvoQFTl9xOWN9MxvnFu555pl5ugoQKsz19fSQrOo+Fb4bfOEXYE8QPy\nVDxX5i2UiEehjk3qX4hkPgfQupnG792T5Ct9+QyN9QKBgQDwWt6SQOT5eKURA4JW\nMI+0PFFZspvbBLitdpak+ZzjEUUoPKmvXTu1yDn2Ehp+1IteArzVyg2w89DgFki3\ncmwrcnkrjzeRbnkFU7VzHddywVYOMGiCecXQQJM3PBwX7HaXwLOCxq1+P290zdne\nXKn9T0QXlMe0v9fkRDQoYkCitwKBgQDjdCLM7c53KVmayOPPQW1rHCgRkl/A5VY9\n0aS/HteSkrYeDVpGnKM4ECbPUd4YW1AAC53gVLotJW3bH1p4TJ2l5MChqAKLlSYY\n7qAmda4/WDl1rqviUnvXz424p3j1IUM1lV2KqqVRMiE9Hn5RnDIGipQAc6yAXzF5\nVcpyDOu0JQKBgQDRnx7ARTKt1Kd5qCrTCrU6BuUYKqq9IGgEeQm3Ri+q5ZQAHLAM\nzm5WAxNx5aYP+US3MAILHpZEPtBrr2OqAnQOjF7bO6PGBagsmi4FAQC3B6EK7PMo\n4BVCpB8ArD8AKm3fueOVabtEAQUuxJ1/zic/UhNb0Zk+rZYXcdhfZBllDwKBgQC8\nRh2oVBBbQrcREMjBff78ckoYgXkRSsSgVzBvoy/9+8MUDSl02aOhfH0jjziwIKWP\n5A3C619Qj3LntoREn+a+syNgrJmuwL7QVHXsX+zkMjsd1oAgzvYEJaHB/554Chh/\n+it75NUC6OPqm5skIo6mK39nAFkBycpCDWmODnPsoQKBgQCApaJoEVXw7Ktzcz+N\na9uqLeHm4qWBFB98ekMwENYe6mZhMyaEvC9ufWLbn8Mxs1Zd5/KvA5VUTSHYMOf4\niBCtP6DeOCIU1CDgwwopqzoX7yhBwhfbvyU60IioKtkn/7WLRlShmnFnbqzFqdgd\n02E4/RLHiot50t7vX2O1VdFOSA==\n-----END PRIVATE KEY-----\n`;
 
@@ -22,31 +27,27 @@ async function getSheetsClient() {
 	return google.sheets({ version: 'v4', auth: jwtClient });
 }
 
-// ✅ Fetch all affiliates and find by ID
-async function findAffiliateById(affiliateId) {
-	let page = 1;
-	const limit = 100;
+// ✅ GHL contact lookup
+async function getGHLContactByEmail(email) {
+	if (!email) return null;
 
-	while (true) {
-		const res = await fetch(`${GOAFFPRO_API}/affiliates?page=${page}&limit=${limit}&fields=id,name,email,ref_code`, {
-			headers: {
-				'X-GOAFFPRO-ACCESS-TOKEN': ACCESS_TOKEN,
-				'Content-Type': 'application/json'
-			}
-		});
-		if (!res.ok) throw new Error(`Failed to fetch affiliates: ${res.status} ${res.statusText}`);
+	const url = `https://services.leadconnectorhq.com/contacts/?locationId=${GHL_LOCATION_ID}&query=${encodeURIComponent(email)}`;
+	const res = await fetch(url, {
+		headers: {
+			'Authorization': `Bearer ${GHL_API_KEY}`,
+			'Version': '2021-07-28',
+			'Accept': 'application/json'
+		}
+	});
 
-		const data = await res.json();
-		const affiliates = data?.affiliates ?? [];
-
-		const found = affiliates.find(a => a.id === affiliateId);
-		if (found) return found;
-
-		if (affiliates.length < limit) break;
-		page++;
+	if (!res.ok) {
+		console.warn(`⚠️ GHL lookup failed: ${res.status}`);
+		return null;
 	}
 
-	return null;
+	const data = await res.json();
+	const first = data.contacts?.[0];
+	return first ? { id: first.id, name: `${first.firstName ?? ''} ${first.lastName ?? ''}`.trim() } : null;
 }
 
 // ✅ Get MLM Top-Level Parent + Assigned Owner
@@ -69,11 +70,8 @@ async function getTopLevelAffiliate(affiliateId, affiliates) {
 		}
 	}
 
-	if (!topLevel) {
-		topLevel = affiliates.find(a => a.id === affiliateId);
-	}
+	if (!topLevel) topLevel = affiliates.find(a => a.id === affiliateId);
 
-	// 👤 Owner mapping
 	const OWNER_MAP = {
 		'andrew dorsey': 'BajUT5rjQGnHGP1lNUDr',
 		'john roush': 'hdpyoUB6nRTiysyUmTQK',
@@ -81,7 +79,8 @@ async function getTopLevelAffiliate(affiliateId, affiliates) {
 		'raoul bowman': 'rjWUeYYFPLEalKgnAD5f',
 		'russell o’hare': 'eNQZEXvcLgRfUVYWu2fU',
 		'russell o\'hare': 'eNQZEXvcLgRfUVYWu2fU',
-		'russell ohare': 'eNQZEXvcLgRfUVYWu2fU'
+		'russell ohare': 'eNQZEXvcLgRfUVYWu2fU',
+		'chris han': 'KB2M5YOl6y8Xr92SHztW'
 	};
 
 	const topLevelName = topLevel?.name?.toLowerCase().trim();
@@ -110,7 +109,7 @@ export async function GET() {
 		const { id, affiliate, customer, created_at } = latest;
 		const affiliateId = affiliate?.id ?? null;
 
-		// 2️⃣ Fetch affiliates list (for lookup)
+		// 2️⃣ Fetch affiliates list
 		const affiliatesRes = await fetch(`${GOAFFPRO_API}/affiliates?fields=id,name,email,ref_code`, {
 			headers: {
 				'X-GOAFFPRO-ACCESS-TOKEN': ACCESS_TOKEN,
@@ -120,21 +119,25 @@ export async function GET() {
 		const affiliatesData = await affiliatesRes.json();
 		const affiliates = affiliatesData.affiliates || [];
 
-		// 3️⃣ Find this affiliate
+		// 3️⃣ Affiliate info
 		const affiliateDetails = affiliates.find(a => a.id === affiliateId);
 		const affiliateName = affiliateDetails?.name ?? 'Unknown';
 		const affiliateEmail = affiliateDetails?.email ?? 'Unknown';
 
-		// 4️⃣ Get MLM Top-Level + AssignedTo
+		// 4️⃣ MLM Top-Level
 		const { topLevel, assignedTo } = await getTopLevelAffiliate(affiliateId, affiliates);
-
 		const topLevelId = topLevel?.id ?? null;
 		const topLevelName = topLevel?.name ?? 'Unknown';
 
 		const customerName = customer?.name ?? 'Unknown';
 		const customerEmail = customer?.email ?? 'Unknown';
 
-		// 5️⃣ Save to Google Sheet
+		// 5️⃣ Lookup GHL contact
+		const ghlContact = await getGHLContactByEmail(customerEmail);
+		const ghlContactId = ghlContact?.id ?? null;
+		const ghlContactName = ghlContact?.name ?? 'Unknown';
+
+		// 6️⃣ Save to Google Sheet (unchanged)
 		const sheets = await getSheetsClient();
 		await sheets.spreadsheets.values.update({
 			spreadsheetId: SPREADSHEET_ID,
@@ -145,9 +148,9 @@ export async function GET() {
 			}
 		});
 
-		// ✅ Return response
+		// ✅ Response (includes contactId)
 		return json({
-			message: 'Fetched latest connection with affiliate top-level details',
+			message: 'Fetched latest connection with affiliate and GHL contact details',
 			connection: {
 				id,
 				affiliateId,
@@ -158,6 +161,8 @@ export async function GET() {
 				assignedTo,
 				customerName,
 				customerEmail,
+				ghlContactId,
+				ghlContactName,
 				createdAt: created_at
 			}
 		});
