@@ -97,13 +97,14 @@ async function getTopLevelAffiliate(affiliateId, affiliates) {
 // ✅ Main handler
 export async function POST({ request }) {
 	try {
-		// 1️⃣ Read incoming data from Make.com
+		// 1️⃣ Read incoming data
 		const { ref_code, email: customerEmail } = await request.json();
 
 		if (!customerEmail) {
 			return json({ error: 'Missing email' }, { status: 400 });
 		}
 
+		// Defaults if no affiliate found
 		let affiliateId = '';
 		let affiliateName = '';
 		let affiliateEmail = '';
@@ -111,9 +112,11 @@ export async function POST({ request }) {
 		let topLevelName = '';
 		let assignedTo = '';
 
-		// 2️⃣ If ref_code is provided → process affiliate lookup
+		// 2️⃣ If ref_code provided → process lookup
 		if (ref_code && ref_code.trim() !== '') {
-			// Fetch affiliates list
+			const search = ref_code.trim().toLowerCase();
+
+			// Fetch all affiliates
 			const affiliatesRes = await fetch(
 				`${GOAFFPRO_API}/affiliates?fields=id,name,email,ref_code`,
 				{
@@ -127,9 +130,16 @@ export async function POST({ request }) {
 			const affiliatesData = await affiliatesRes.json();
 			const affiliates = affiliatesData.affiliates || [];
 
-			// Find affiliate by ref_code
-			const affiliate = affiliates.find(a => a.ref_code === ref_code);
+			// 3️⃣ First try to match by ref_code (case-insensitive)
+			let affiliate =
+				affiliates.find(a => (a.ref_code ?? '').toLowerCase() === search);
 
+			// 4️⃣ If not found → try to match by affiliate name (case-insensitive)
+			if (!affiliate) {
+				affiliate = affiliates.find(a => (a.name ?? '').toLowerCase() === search);
+			}
+
+			// 5️⃣ If affiliate found → populate details
 			if (affiliate) {
 				affiliateId = affiliate.id ?? '';
 				affiliateName = affiliate.name ?? '';
@@ -144,12 +154,12 @@ export async function POST({ request }) {
 			}
 		}
 
-		// 3️⃣ Lookup GHL contact using provided email
+		// 6️⃣ Lookup GHL contact using provided email
 		const ghlContact = await getGHLContactByEmail(customerEmail);
 		const ghlContactId = ghlContact?.id ?? '';
 		const ghlContactName = ghlContact?.name ?? '';
 
-		// 4️⃣ Save to Google Sheet
+		// 7️⃣ Save to Google Sheet
 		const sheets = await getSheetsClient();
 		await sheets.spreadsheets.values.update({
 			spreadsheetId: SPREADSHEET_ID,
@@ -169,7 +179,7 @@ export async function POST({ request }) {
 			}
 		});
 
-		// 5️⃣ Return the final result
+		// 8️⃣ Return result
 		return json({
 			message: 'Processed successfully',
 			connection: {
@@ -190,6 +200,7 @@ export async function POST({ request }) {
 		return json({ error: err.message }, { status: 500 });
 	}
 }
+
 
 
 
