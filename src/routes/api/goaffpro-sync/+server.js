@@ -100,46 +100,56 @@ export async function POST({ request }) {
 		// 1️⃣ Read incoming data from Make.com
 		const { ref_code, email: customerEmail } = await request.json();
 
-		if (!ref_code || !customerEmail) {
-			return json({ error: 'Missing ref_code or email' }, { status: 400 });
+		if (!customerEmail) {
+			return json({ error: 'Missing email' }, { status: 400 });
 		}
 
-		// 2️⃣ Fetch affiliates list
-		const affiliatesRes = await fetch(
-			`${GOAFFPRO_API}/affiliates?fields=id,name,email,ref_code`,
-			{
-				headers: {
-					'X-GOAFFPRO-ACCESS-TOKEN': ACCESS_TOKEN,
-					'Content-Type': 'application/json',
-				},
+		let affiliateId = '';
+		let affiliateName = '';
+		let affiliateEmail = '';
+		let topLevelId = '';
+		let topLevelName = '';
+		let assignedTo = '';
+
+		// 2️⃣ If ref_code is provided → process affiliate lookup
+		if (ref_code && ref_code.trim() !== '') {
+			// Fetch affiliates list
+			const affiliatesRes = await fetch(
+				`${GOAFFPRO_API}/affiliates?fields=id,name,email,ref_code`,
+				{
+					headers: {
+						'X-GOAFFPRO-ACCESS-TOKEN': ACCESS_TOKEN,
+						'Content-Type': 'application/json',
+					},
+				}
+			);
+
+			const affiliatesData = await affiliatesRes.json();
+			const affiliates = affiliatesData.affiliates || [];
+
+			// Find affiliate by ref_code
+			const affiliate = affiliates.find(a => a.ref_code === ref_code);
+
+			if (affiliate) {
+				affiliateId = affiliate.id ?? '';
+				affiliateName = affiliate.name ?? '';
+				affiliateEmail = affiliate.email ?? '';
+
+				// MLM Top-Level Lookup
+				const mlm = await getTopLevelAffiliate(affiliateId, affiliates);
+
+				topLevelId = mlm.topLevel?.id ?? '';
+				topLevelName = mlm.topLevel?.name ?? '';
+				assignedTo = mlm.assignedTo ?? '';
 			}
-		);
-
-		const affiliatesData = await affiliatesRes.json();
-		const affiliates = affiliatesData.affiliates || [];
-
-		// 3️⃣ Find affiliate by ref_code
-		const affiliate = affiliates.find(a => a.ref_code === ref_code);
-
-		if (!affiliate) {
-			return json({ error: `Affiliate not found for ref_code ${ref_code}` }, { status: 404 });
 		}
 
-		const affiliateId = affiliate.id;
-		const affiliateName = affiliate.name ?? 'Unknown';
-		const affiliateEmail = affiliate.email ?? 'Unknown';
-
-		// 4️⃣ MLM Top-Level Lookup
-		const { topLevel, assignedTo } = await getTopLevelAffiliate(affiliateId, affiliates);
-		const topLevelId = topLevel?.id ?? null;
-		const topLevelName = topLevel?.name ?? 'Unknown';
-
-		// 5️⃣ Lookup GHL contact using provided email
+		// 3️⃣ Lookup GHL contact using provided email
 		const ghlContact = await getGHLContactByEmail(customerEmail);
-		const ghlContactId = ghlContact?.id ?? null;
-		const ghlContactName = ghlContact?.name ?? 'Unknown';
+		const ghlContactId = ghlContact?.id ?? '';
+		const ghlContactName = ghlContact?.name ?? '';
 
-		// 6️⃣ Save to Google Sheet
+		// 4️⃣ Save to Google Sheet
 		const sheets = await getSheetsClient();
 		await sheets.spreadsheets.values.update({
 			spreadsheetId: SPREADSHEET_ID,
@@ -159,9 +169,9 @@ export async function POST({ request }) {
 			}
 		});
 
-		// 7️⃣ Return the final result
+		// 5️⃣ Return the final result
 		return json({
-			message: 'Processed affiliate + GHL email successfully',
+			message: 'Processed successfully',
 			connection: {
 				affiliateId,
 				affiliateName,
@@ -180,6 +190,7 @@ export async function POST({ request }) {
 		return json({ error: err.message }, { status: 500 });
 	}
 }
+
 
 
 // ✅ Main handler
