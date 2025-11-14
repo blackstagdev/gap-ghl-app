@@ -53,33 +53,6 @@ async function getGHLContactByEmail(email) {
 	return first ? { id: first.id, name: `${first.firstName ?? ''} ${first.lastName ?? ''}`.trim() } : null;
 }
 
-// ========================================================
-// ✅ POST → STORE ref_code AND email
-// ========================================================
-export async function POST({ request }) {
-	try {
-		const { ref_code, email } = await request.json();
-
-		if (!ref_code || !email) {
-			return json(
-				{ error: 'Missing ref_code or email in POST request' },
-				{ status: 400 }
-			);
-		}
-
-		lastRefCode = ref_code;
-		lastCustomerEmail = email;
-
-		return json({
-			message: 'ref_code + email stored successfully',
-			ref_code,
-			email,
-		});
-	} catch (err) {
-		console.error('POST error:', err);
-		return json({ error: err.message }, { status: 500 });
-	}
-}
 
 // ✅ Get MLM Top-Level Parent + Assigned Owner
 async function getTopLevelAffiliate(affiliateId, affiliates) {
@@ -120,18 +93,18 @@ async function getTopLevelAffiliate(affiliateId, affiliates) {
 	return { topLevel, assignedTo };
 }
 
+
 // ✅ Main handler
-export async function GET() {
+export async function POST({ request }) {
 	try {
-		// 1️⃣ Ensure POST happened
-		if (!lastRefCode || !lastCustomerEmail) {
-			return json(
-				{ error: 'No POST data stored. Send ref_code + email first.' },
-				{ status: 400 }
-			);
+		// 1️⃣ Read incoming data from Make.com
+		const { ref_code, email: customerEmail } = await request.json();
+
+		if (!ref_code || !customerEmail) {
+			return json({ error: 'Missing ref_code or email' }, { status: 400 });
 		}
 
-		// 2️⃣ Fetch affiliates
+		// 2️⃣ Fetch affiliates list
 		const affiliatesRes = await fetch(
 			`${GOAFFPRO_API}/affiliates?fields=id,name,email,ref_code`,
 			{
@@ -145,11 +118,11 @@ export async function GET() {
 		const affiliatesData = await affiliatesRes.json();
 		const affiliates = affiliatesData.affiliates || [];
 
-		// 3️⃣ Find affiliate by POST'ed ref_code
-		const affiliate = affiliates.find(a => a.ref_code === lastRefCode);
+		// 3️⃣ Find affiliate by ref_code
+		const affiliate = affiliates.find(a => a.ref_code === ref_code);
 
 		if (!affiliate) {
-			return json({ error: `No affiliate found for ref_code ${lastRefCode}` }, { status: 404 });
+			return json({ error: `Affiliate not found for ref_code ${ref_code}` }, { status: 404 });
 		}
 
 		const affiliateId = affiliate.id;
@@ -161,15 +134,12 @@ export async function GET() {
 		const topLevelId = topLevel?.id ?? null;
 		const topLevelName = topLevel?.name ?? 'Unknown';
 
-		// 5️⃣ Customer email from POST
-		const customerEmail = lastCustomerEmail;
-
-		// 6️⃣ Lookup GHL contact
+		// 5️⃣ Lookup GHL contact using provided email
 		const ghlContact = await getGHLContactByEmail(customerEmail);
 		const ghlContactId = ghlContact?.id ?? null;
 		const ghlContactName = ghlContact?.name ?? 'Unknown';
 
-		// 7️⃣ Save to Google Sheet
+		// 6️⃣ Save to Google Sheet
 		const sheets = await getSheetsClient();
 		await sheets.spreadsheets.values.update({
 			spreadsheetId: SPREADSHEET_ID,
@@ -189,7 +159,7 @@ export async function GET() {
 			}
 		});
 
-		// 8️⃣ Response
+		// 7️⃣ Return the final result
 		return json({
 			message: 'Processed affiliate + GHL email successfully',
 			connection: {
@@ -206,8 +176,97 @@ export async function GET() {
 		});
 
 	} catch (err) {
-		console.error('Error fetching or saving:', err);
+		console.error('POST error:', err);
 		return json({ error: err.message }, { status: 500 });
 	}
 }
+
+
+// ✅ Main handler
+// export async function GET() {
+// 	try {
+	
+// 		if (!lastRefCode || !lastCustomerEmail) {
+// 			return json(
+// 				{ error: 'No POST data stored. Send ref_code + email first.' },
+// 				{ status: 400 }
+// 			);
+// 		}
+// 		const affiliatesRes = await fetch(
+// 			`${GOAFFPRO_API}/affiliates?fields=id,name,email,ref_code`,
+// 			{
+// 				headers: {
+// 					'X-GOAFFPRO-ACCESS-TOKEN': ACCESS_TOKEN,
+// 					'Content-Type': 'application/json',
+// 				},
+// 			}
+// 		);
+
+// 		const affiliatesData = await affiliatesRes.json();
+// 		const affiliates = affiliatesData.affiliates || [];
+
+
+// 		const affiliate = affiliates.find(a => a.ref_code === lastRefCode);
+
+// 		if (!affiliate) {
+// 			return json({ error: `No affiliate found for ref_code ${lastRefCode}` }, { status: 404 });
+// 		}
+
+// 		const affiliateId = affiliate.id;
+// 		const affiliateName = affiliate.name ?? 'Unknown';
+// 		const affiliateEmail = affiliate.email ?? 'Unknown';
+
+
+// 		const { topLevel, assignedTo } = await getTopLevelAffiliate(affiliateId, affiliates);
+// 		const topLevelId = topLevel?.id ?? null;
+// 		const topLevelName = topLevel?.name ?? 'Unknown';
+
+
+// 		const customerEmail = lastCustomerEmail;
+
+
+// 		const ghlContact = await getGHLContactByEmail(customerEmail);
+// 		const ghlContactId = ghlContact?.id ?? null;
+// 		const ghlContactName = ghlContact?.name ?? 'Unknown';
+
+// 		const sheets = await getSheetsClient();
+// 		await sheets.spreadsheets.values.update({
+// 			spreadsheetId: SPREADSHEET_ID,
+// 			range: 'since!A2:H2',
+// 			valueInputOption: 'RAW',
+// 			requestBody: {
+// 				values: [[
+// 					affiliateId,
+// 					affiliateName,
+// 					affiliateEmail,
+// 					topLevelId,
+// 					topLevelName,
+// 					assignedTo,
+// 					customerEmail,
+// 					ghlContactId
+// 				]]
+// 			}
+// 		});
+
+
+// 		return json({
+// 			message: 'Processed affiliate + GHL email successfully',
+// 			connection: {
+// 				affiliateId,
+// 				affiliateName,
+// 				affiliateEmail,
+// 				topLevelId,
+// 				topLevelName,
+// 				assignedTo,
+// 				customerEmail,
+// 				ghlContactId,
+// 				ghlContactName
+// 			}
+// 		});
+
+// 	} catch (err) {
+// 		console.error('Error fetching or saving:', err);
+// 		return json({ error: err.message }, { status: 500 });
+// 	}
+// }
 
