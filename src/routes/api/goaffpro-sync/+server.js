@@ -1,6 +1,9 @@
 import { json } from '@sveltejs/kit';
 import { google } from 'googleapis';
 
+let lastRefCode = null;
+let lastCustomerEmail = null;
+
 const GOAFFPRO_API = 'https://api.goaffpro.com/v1/admin';
 const SPREADSHEET_ID = '1ZOur_nWFwq3zh0ERci-4AARxbric6EU2-zYWxfogaHE';
 const ACCESS_TOKEN = '5d7c7806d9545a1d44d0dfd9da39e4b9fc513d43fe24a56cb9ced3280252ac22';
@@ -50,6 +53,34 @@ async function getGHLContactByEmail(email) {
 	return first ? { id: first.id, name: `${first.firstName ?? ''} ${first.lastName ?? ''}`.trim() } : null;
 }
 
+// ========================================================
+// ✅ POST → STORE ref_code AND email
+// ========================================================
+export async function POST({ request }) {
+	try {
+		const { ref_code, email } = await request.json();
+
+		if (!ref_code || !email) {
+			return json(
+				{ error: 'Missing ref_code or email in POST request' },
+				{ status: 400 }
+			);
+		}
+
+		lastRefCode = ref_code;
+		lastCustomerEmail = email;
+
+		return json({
+			message: 'ref_code + email stored successfully',
+			ref_code,
+			email,
+		});
+	} catch (err) {
+		console.error('POST error:', err);
+		return json({ error: err.message }, { status: 500 });
+	}
+}
+
 // ✅ Get MLM Top-Level Parent + Assigned Owner
 async function getTopLevelAffiliate(affiliateId, affiliates) {
 	const res = await fetch(`${GOAFFPRO_API}/mlm/parents/${affiliateId}`, {
@@ -92,82 +123,91 @@ async function getTopLevelAffiliate(affiliateId, affiliates) {
 // ✅ Main handler
 export async function GET() {
 	try {
-		// 1️⃣ Fetch latest connection
-		const res = await fetch(`${GOAFFPRO_API}/connections`, {
-			headers: {
-				'X-GOAFFPRO-ACCESS-TOKEN': ACCESS_TOKEN,
-				'Content-Type': 'application/json'
+		// 1️⃣ Ensure POST happened
+		if (!lastRefCode || !lastCustomerEmail) {
+			return json(
+				{ error: 'No POST data stored. Send ref_code + email first.' },
+				{ status: 400 }
+			);
+		}
+
+		// 2️⃣ Fetch affiliates
+		const affiliatesRes = await fetch(
+			`${GOAFFPRO_API}/affiliates?fields=id,name,email,ref_code`,
+			{
+				headers: {
+					'X-GOAFFPRO-ACCESS-TOKEN': ACCESS_TOKEN,
+					'Content-Type': 'application/json',
+				},
 			}
-		});
-		if (!res.ok) throw new Error(`GoAffPro API error: ${res.status} ${res.statusText}`);
+		);
 
-		const data = await res.json();
-		const connections = data?.connections ?? [];
-		if (!connections.length) return json({ message: 'No connections found' });
-
-		const latest = connections.reduce((max, c) => (c.id > max.id ? c : max), connections[0]);
-		const { id, affiliate, customer, created_at } = latest;
-		const affiliateId = affiliate?.id ?? null;
-
-		// 2️⃣ Fetch affiliates list
-		const affiliatesRes = await fetch(`${GOAFFPRO_API}/affiliates?fields=id,name,email,ref_code`, {
-			headers: {
-				'X-GOAFFPRO-ACCESS-TOKEN': ACCESS_TOKEN,
-				'Content-Type': 'application/json'
-			}
-		});
 		const affiliatesData = await affiliatesRes.json();
 		const affiliates = affiliatesData.affiliates || [];
 
-		// 3️⃣ Affiliate info
-		const affiliateDetails = affiliates.find(a => a.id === affiliateId);
-		const affiliateName = affiliateDetails?.name ?? 'Unknown';
-		const affiliateEmail = affiliateDetails?.email ?? 'Unknown';
+		// 3️⃣ Find affiliate by POST'ed ref_code
+		const affiliate = affiliates.find(a => a.ref_code === lastRefCode);
 
-		// 4️⃣ MLM Top-Level
+		if (!affiliate) {
+			return json({ error: `No affiliate found for ref_code ${lastRefCode}` }, { status: 404 });
+		}
+
+		const affiliateId = affiliate.id;
+		const affiliateName = affiliate.name ?? 'Unknown';
+		const affiliateEmail = affiliate.email ?? 'Unknown';
+
+		// 4️⃣ MLM Top-Level Lookup
 		const { topLevel, assignedTo } = await getTopLevelAffiliate(affiliateId, affiliates);
 		const topLevelId = topLevel?.id ?? null;
 		const topLevelName = topLevel?.name ?? 'Unknown';
 
-		const customerName = customer?.name ?? 'Unknown';
-		const customerEmail = customer?.email ?? 'Unknown';
+		// 5️⃣ Customer email from POST
+		const customerEmail = lastCustomerEmail;
 
-		// 5️⃣ Lookup GHL contact
+		// 6️⃣ Lookup GHL contact
 		const ghlContact = await getGHLContactByEmail(customerEmail);
 		const ghlContactId = ghlContact?.id ?? null;
 		const ghlContactName = ghlContact?.name ?? 'Unknown';
 
-		// 6️⃣ Save to Google Sheet (unchanged)
+		// 7️⃣ Save to Google Sheet
 		const sheets = await getSheetsClient();
 		await sheets.spreadsheets.values.update({
 			spreadsheetId: SPREADSHEET_ID,
 			range: 'since!A2:H2',
 			valueInputOption: 'RAW',
 			requestBody: {
-				values: [[id, affiliateId, affiliateName, affiliateEmail, topLevelId, topLevelName, assignedTo, customerEmail]]
+				values: [[
+					affiliateId,
+					affiliateName,
+					affiliateEmail,
+					topLevelId,
+					topLevelName,
+					assignedTo,
+					customerEmail,
+					ghlContactId
+				]]
 			}
 		});
 
-		// ✅ Response (includes contactId)
+		// 8️⃣ Response
 		return json({
-			message: 'Fetched latest connection with affiliate and GHL contact details',
+			message: 'Processed affiliate + GHL email successfully',
 			connection: {
-				id,
 				affiliateId,
 				affiliateName,
 				affiliateEmail,
 				topLevelId,
 				topLevelName,
 				assignedTo,
-				customerName,
 				customerEmail,
 				ghlContactId,
-				ghlContactName,
-				createdAt: created_at
+				ghlContactName
 			}
 		});
+
 	} catch (err) {
 		console.error('Error fetching or saving:', err);
 		return json({ error: err.message }, { status: 500 });
 	}
 }
+
