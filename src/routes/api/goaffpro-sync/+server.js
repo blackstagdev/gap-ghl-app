@@ -64,6 +64,7 @@ async function getTopLevelAffiliate(affiliateId, affiliates) {
 	});
 
 	let topLevel = null;
+
 	if (res.ok) {
 		const data = await res.json();
 		const parents = data?.parents ?? [];
@@ -74,7 +75,20 @@ async function getTopLevelAffiliate(affiliateId, affiliates) {
 		}
 	}
 
+	// fallback to self
 	if (!topLevel) topLevel = affiliates.find(a => a.id === affiliateId);
+
+	// If no top-level affiliate found at all
+	if (!topLevel) {
+		return { topLevel: null, assignedTo: null };
+	}
+
+	// CLEAN NAME FOR MATCHING
+	let cleanedName = topLevel.name
+		?.toLowerCase()
+		.replace(/\d+/g, '')          // remove numbers
+		.replace(/\s+/g, ' ')         // collapse spaces
+		.trim();
 
 	const OWNER_MAP = {
 		'andrew dorsey': 'BajUT5rjQGnHGP1lNUDr',
@@ -87,12 +101,22 @@ async function getTopLevelAffiliate(affiliateId, affiliates) {
 		'chris han': 'KB2M5YOl6y8Xr92SHztW'
 	};
 
-	const topLevelName = topLevel?.name?.toLowerCase().trim();
-	const assignedTo = topLevelName ? OWNER_MAP[topLevelName] || null : null;
+	let assignedTo = null;
+
+	// 🔥 NEW: CONTAINS MATCHING
+	for (const key of Object.keys(OWNER_MAP)) {
+		const cleanedKey = key.toLowerCase().trim();
+
+		if (cleanedName.includes(cleanedKey)) {
+			assignedTo = OWNER_MAP[key];
+			break;
+		}
+	}
 
 	return { topLevel, assignedTo };
 }
 
+ 
 
 // ✅ Main handler
 export async function POST({ request }) {
