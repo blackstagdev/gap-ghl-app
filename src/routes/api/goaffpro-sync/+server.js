@@ -264,7 +264,7 @@ export async function POST({ request }) {
 				topLevelName,
 				assignedTo,
 				assignedPartner,
-				ghlEmail,
+				ghlEmail: customerEmail,
 				ghlContactId,
 				ghlContactName
 			}
