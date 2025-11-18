@@ -116,7 +116,55 @@ async function getTopLevelAffiliate(affiliateId, affiliates) {
 	return { topLevel, assignedTo };
 }
 
- 
+async function getAssignedPartnerByCustomerEmail(customerEmail) {
+	if (!customerEmail) return null;
+
+	// Fetch all connections
+	const connectionsRes = await fetch(`${GOAFFPRO_API}/connections`, {
+		headers: {
+			'X-GOAFFPRO-ACCESS-TOKEN': ACCESS_TOKEN,
+			'Content-Type': 'application/json'
+		}
+	});
+
+	if (!connectionsRes.ok) {
+		console.warn(`⚠️ GoAffPro connections lookup failed: ${connectionsRes.status}`);
+		return null;
+	}
+
+	const connectionsData = await connectionsRes.json();
+	const connections = connectionsData.connections || [];
+
+	// Find matching customer email
+	const match = connections.find(
+		c => c?.customer?.email?.toLowerCase() === customerEmail.toLowerCase()
+	);
+
+	if (!match) return null;
+
+	const affiliateId = match.affiliate?.id;
+	if (!affiliateId) return null;
+
+	// Fetch affiliates
+	const affiliatesRes = await fetch(
+		`${GOAFFPRO_API}/affiliates?fields=id,name,email,ref_code`,
+		{
+			headers: {
+				'X-GOAFFPRO-ACCESS-TOKEN': ACCESS_TOKEN,
+				'Content-Type': 'application/json'
+			}
+		}
+	);
+
+	const affiliatesData = await affiliatesRes.json();
+	const affiliates = affiliatesData.affiliates || [];
+
+	// Get affiliate
+	const affiliate = affiliates.find(a => a.id === affiliateId);
+
+	// Return just the name
+	return affiliate?.name ?? null;
+}
 
 // ✅ Main handler
 export async function POST({ request }) {
@@ -182,6 +230,7 @@ export async function POST({ request }) {
 		const ghlContact = await getGHLContactByEmail(customerEmail);
 		const ghlContactId = ghlContact?.id ?? '';
 		const ghlContactName = ghlContact?.name ?? '';
+		const assignedPartner = await getAssignedPartnerByCustomerEmail(customerEmail);
 
 		// 7️⃣ Save to Google Sheet
 		const sheets = await getSheetsClient();
@@ -198,7 +247,8 @@ export async function POST({ request }) {
 					topLevelName,
 					assignedTo,
 					customerEmail,
-					ghlContactId
+					ghlContactId,
+					assignedPartner ?? ''
 				]]
 			}
 		});
@@ -213,7 +263,8 @@ export async function POST({ request }) {
 				topLevelId,
 				topLevelName,
 				assignedTo,
-				customerEmail,
+				assignedPartner,
+				ghlEmail,
 				ghlContactId,
 				ghlContactName
 			}
