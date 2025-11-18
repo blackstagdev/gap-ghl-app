@@ -236,7 +236,7 @@ export async function POST({ request }) {
 		const sheets = await getSheetsClient();
 		await sheets.spreadsheets.values.update({
 			spreadsheetId: SPREADSHEET_ID,
-			range: 'since!A2:H2',
+			range: 'since!A2:I2',
 			valueInputOption: 'RAW',
 			requestBody: {
 				values: [[
