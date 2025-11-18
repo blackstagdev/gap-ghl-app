@@ -163,7 +163,7 @@ async function getAssignedPartnerByCustomerEmail(customerEmail) {
 	const affiliate = affiliates.find(a => a.id === affiliateId);
 
 	// Return just the name
-	return affiliate?.name ?? null;
+	return affiliate ?? null;
 }
 
 // ✅ Main handler
@@ -248,7 +248,7 @@ export async function POST({ request }) {
 					assignedTo,
 					customerEmail,
 					ghlContactId,
-					assignedPartner ?? ''
+					assignedPartner?.name ?? ''
 				]]
 			}
 		});
@@ -263,7 +263,8 @@ export async function POST({ request }) {
 				topLevelId,
 				topLevelName,
 				assignedTo,
-				assignedPartner,
+				assignedPartnerName: assignedPartner?.name,
+				assignedPartnerId: assignedPartner?.id,
 				ghlEmail: customerEmail,
 				ghlContactId,
 				ghlContactName
