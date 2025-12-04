@@ -208,7 +208,9 @@ export async function POST({ request }) {
 
 			// 4️⃣ If not found → try to match by affiliate name (case-insensitive)
 			if (!affiliate) {
-				affiliate = affiliates.find(a => (a.name ?? '').toLowerCase() === search);
+				affiliate = affiliates.find(a =>
+					(a.name ?? '').toLowerCase().includes(search)
+				);
 			}
 
 			// 5️⃣ If affiliate found → populate details
