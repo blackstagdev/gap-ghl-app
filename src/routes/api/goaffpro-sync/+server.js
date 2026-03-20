@@ -207,10 +207,34 @@ export async function POST({ request }) {
 				affiliates.find(a => (a.ref_code ?? '').toLowerCase() === search);
 
 			// 4️⃣ If not found → try to match by affiliate name (case-insensitive)
-			if (!affiliate) {
-				affiliate = affiliates.find(a =>
-					(a.name ?? '').toLowerCase().includes(search)
-				);
+			if (!affiliate && customerEmail) {
+				try {
+					const connRes = await fetch(
+						`${GOAFFPRO_API}/connections?customer_email=${encodeURIComponent(customerEmail)}`,
+						{
+							headers: {
+								'X-GOAFFPRO-ACCESS-TOKEN': ACCESS_TOKEN,
+								'Content-Type': 'application/json',
+							},
+						}
+					);
+			
+					if (connRes.ok) {
+						const connData = await connRes.json();
+						const connection = connData.connections?.[0];
+			
+						if (connection?.affiliate?.id) {
+							const affiliateIdFromConnection = connection.affiliate.id;
+			
+							// find full affiliate data
+							affiliate = affiliates.find(a => a.id === affiliateIdFromConnection);
+						}
+					} else {
+						console.warn(`⚠️ Connection lookup failed: ${connRes.status}`);
+					}
+				} catch (err) {
+					console.warn('⚠️ Error fetching connection:', err);
+				}
 			}
 
 			// 5️⃣ If affiliate found → populate details
